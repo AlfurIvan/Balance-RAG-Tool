@@ -545,7 +545,8 @@ class GameBalanceRAG:
     #     result = qa_chain({"query": question})
     #     return result
     
-    # def query_structured(self, question: str, output_schema: Dict) -> Dict:
+    def query_structured(self, question: str, output_schema: Dict) -> Dict:
+        pass
     #     """
     #     Get structured JSON responses from the LLM.
     #
