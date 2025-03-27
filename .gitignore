@@ -1,0 +1,9 @@
+/.idea
+/.env
+/myenv
+/docs/chroma/*
+!/docs/chroma/.gitkeep
+/docs/balance/*
+!/docs/balance/.gitkeep
+/docs/books/*
+!/docs/books/.gitkeep
