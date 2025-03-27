@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+import re
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from dotenv import load_dotenv, find_dotenv
@@ -7,8 +9,8 @@ from dotenv import load_dotenv, find_dotenv
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, CSVLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter, CharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
 from langchain.retrievers.self_query.base import SelfQueryRetriever
@@ -26,7 +28,6 @@ PROMPT_TEMPLATE="""Use the following pieces of context to answer the question at
             
             Question: {question}
             Answer:"""
-
 
 
 class GameBalanceRAG:
@@ -511,126 +512,124 @@ class GameBalanceRAG:
         else:
             return str(response)
     
-    def query_with_chain(self, question: str) -> Dict[str, Any]:
-        """
-        Use a RetrievalQA chain for more structured responses.
-        
-        Args:
-            question: Question to ask
-            
-        Returns:
-            Dictionary with response and source documents
-        """
-        if not self.vectordb:
-            raise ValueError("Vector database not initialized.")
-        
-        # Define a custom prompt for the chain
-        custom_prompt = PromptTemplate(
-            PROMPT_TEMPLATE,
-            input_variables=["context", "question"]
-        )
-        
-        # Create a QA chain that returns source documents
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type="stuff",  # Combines all documents into single context
-            retriever=self.vectordb.as_retriever(search_kwargs={"k": 5}),
-            chain_type_kwargs={"prompt": custom_prompt},
-            return_source_documents=True,
-            verbose=True
-        )
-        
-        # Run the chain
-        result = qa_chain({"query": question})
-        return result
+    # def query_with_chain(self, question: str) -> Dict[str, Any]:
+    #     """
+    #     Use a RetrievalQA chain for more structured responses.
+    #
+    #     Args:
+    #         question: Question to ask
+    #
+    #     Returns:
+    #         Dictionary with response and source documents
+    #     """
+    #     if not self.vectordb:
+    #         raise ValueError("Vector database not initialized.")
+    #
+    #     # Define a custom prompt for the chain
+    #     custom_prompt = PromptTemplate(
+    #         PROMPT_TEMPLATE,
+    #         input_variables=["context", "question"]
+    #     )
+    #
+    #     # Create a QA chain that returns source documents
+    #     qa_chain = RetrievalQA.from_chain_type(
+    #         llm=self.llm,
+    #         chain_type="stuff",  # Combines all documents into single context
+    #         retriever=self.vectordb.as_retriever(search_kwargs={"k": 5}),
+    #         chain_type_kwargs={"prompt": custom_prompt},
+    #         return_source_documents=True,
+    #         verbose=True
+    #     )
+    #
+    #     # Run the chain
+    #     result = qa_chain({"query": question})
+    #     return result
     
-    def query_structured(self, question: str, output_schema: Dict) -> Dict:
-        """
-        Get structured JSON responses from the LLM.
-        
-        Args:
-            question: Question to ask
-            output_schema: Schema defining the expected output format
-            
-        Returns:
-            Structured response as a dictionary
-        """
-        # Get relevant documents with hybrid search for better recall
-        relevant_docs = self.hybrid_search(question, k=7)
-        
-        # If no docs found, try direct keyword search
-        if not relevant_docs:
-            # Split the question into words and search for each one
-            keywords = [word for word in question.split() if len(word) > 3]
-            if not keywords:
-                keywords = [question]  # Use the whole question if no good keywords
-            
-            for keyword in keywords:
-                keyword_docs = self.keyword_search(keyword, k=2)
-                if keyword_docs:
-                    relevant_docs.extend(keyword_docs)
-        
-        # If still no docs found, return error
-        if not relevant_docs:
-            return {
-                "error": "No relevant information found",
-                "mechanic_name": question,
-                "description": "No information found in the provided documents.",
-                "balance_implications": "Unable to determine without document information.",
-                "recommended_values": "No data available."
-            }
-        
-        context = "\n\n".join([doc.page_content for doc in relevant_docs])
-        
-        # Create prompt for structured output
-        prompt = f"""
-        You are a game balance expert assistant. Use the following information to answer the question.
-        
-        Context:
-        {context}
-        
-        Question: {question}
-        
-        Instructions:
-        - Use the provided information to the best of your ability.
-        - If information is incomplete, note this but still provide what you can based on context.
-        - Make educated inferences about game balance if direct information is lacking.
-        
-        Return your answer as a JSON object following this schema:
-        {output_schema}
-        
-        Only return the JSON object, no other text.
-        """
-        
-        # Parse the response as JSON
-        import json
-        try:
-            response = self.llm.invoke(prompt)
-            
-            # For ChatOpenAI, we need to extract the content
-            if hasattr(response, 'content'):
-                response_text = response.content
-            else:
-                response_text = str(response)
-                
-            # Find JSON in response (handles cases where LLM adds extra text)
-            import re
-            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_str = response_text
-            
-            return json.loads(json_str)
-        except json.JSONDecodeError:
-            return {
-                "error": "Could not parse response as JSON",
-                "raw_response": str(response),
-                "mechanic_name": question,
-                "description": "Error processing the response.",
-                "balance_implications": "Unable to format structured data.",
-                "recommended_values": "Please try again with a different query."
-            }
+    # def query_structured(self, question: str, output_schema: Dict) -> Dict:
+    #     """
+    #     Get structured JSON responses from the LLM.
+    #
+    #     Args:
+    #         question: Question to ask
+    #         output_schema: Schema defining the expected output format
+    #
+    #     Returns:
+    #         Structured response as a dictionary
+    #     """
+    #     # Get relevant documents with hybrid search for better recall
+    #     relevant_docs = self.hybrid_search(question, k=7)
+    #
+    #     # If no docs found, try direct keyword search
+    #     if not relevant_docs:
+    #         # Split the question into words and search for each one
+    #         keywords = [word for word in question.split() if len(word) > 3]
+    #         if not keywords:
+    #             keywords = [question]  # Use the whole question if no good keywords
+    #
+    #         for keyword in keywords:
+    #             keyword_docs = self.keyword_search(keyword, k=2)
+    #             if keyword_docs:
+    #                 relevant_docs.extend(keyword_docs)
+    #
+    #     # If still no docs found, return error
+    #     if not relevant_docs:
+    #         return {
+    #             "error": "No relevant information found",
+    #             "mechanic_name": question,
+    #             "description": "No information found in the provided documents.",
+    #             "balance_implications": "Unable to determine without document information.",
+    #             "recommended_values": "No data available."
+    #         }
+    #
+    #     context = "\n\n".join([doc.page_content for doc in relevant_docs])
+    #
+    #     # Create prompt for structured output
+    #     prompt = f"""
+    #     You are a game balance expert assistant. Use the following information to answer the question.
+    #
+    #     Context:
+    #     {context}
+    #
+    #     Question: {question}
+    #
+    #     Instructions:
+    #     - Use the provided information to the best of your ability.
+    #     - If information is incomplete, note this but still provide what you can based on context.
+    #     - Make educated inferences about game balance if direct information is lacking.
+    #
+    #     Return your answer as a JSON object following this schema:
+    #     {output_schema}
+    #
+    #     Only return the JSON object, no other text.
+    #     """
+    #
+    #     # Parse the response as JSON
+    #     response = self.llm.invoke(prompt)
+    #
+    #     # For ChatOpenAI, we need to extract the content
+    #     if hasattr(response, 'content'):
+    #         response_text = response.content
+    #     else:
+    #         response_text = str(response)
+    #
+    #     # Find JSON in response (handles cases where LLM adds extra text)
+    #     json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+    #     if json_match:
+    #         json_str = json_match.group(1)
+    #     else:
+    #         json_str = response_text
+    #
+    #     try:
+    #         return json.loads(json_str)
+    #     except json.JSONDecodeError:
+    #         return {
+    #             "error": "Could not parse response as JSON",
+    #             "raw_response": str(response),
+    #             "mechanic_name": question,
+    #             "description": "Error processing the response.",
+    #             "balance_implications": "Unable to format structured data.",
+    #             "recommended_values": "Please try again with a different query."
+    #         }
     
     def process_documents_and_create_db(self, file_paths: List[str], 
                                       category: str = "general",
