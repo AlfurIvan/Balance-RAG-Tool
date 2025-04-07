@@ -713,20 +713,20 @@ def main():
     
     # Initialize the RAG tool with some parameters
     rag_tool = GameBalanceRAG(
-        chunk_size=300,           # Larger chunk size for more context
-        chunk_overlap=100,         # More overlap to avoid splitting important concepts
-        model_name=DEFAULT_GPT_MODEL,       # Using gpt-4o
+        chunk_size=300,
+        chunk_overlap=100,
+        model_name=DEFAULT_GPT_MODEL,
         temperature=0.0,           
-        game_version="1.0.0",      # Game version being documented
-        debug_mode=False            # Enable debug output to diagnose issues
+        game_version="1.0.0",
+        debug_mode=False
     )
     
     # Process documents and create database - force recreate to ensure fresh start
     rag_tool.process_documents_and_create_db(
         file_paths, 
         category="combat_mechanics",
-        force_recreate=True,      # Force recreate the database to fix any issues
-        retriever_type="basic"    # Use basic retriever for simpler, more direct retrieval
+        force_recreate=False,
+        retriever_type="basic"
     )
     
     # Using metadata filtering example
